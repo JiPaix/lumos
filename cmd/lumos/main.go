@@ -59,10 +59,10 @@ func main() {
 		}
 	}
 
-	// Handle Lumos
+	// Handle Night Light
 	if *nightFlag != "" {
 		hasOperation = true
-		if err := handleLumos(*nightFlag); err != nil {
+		if err := handleNightLight(*nightFlag); err != nil {
 			fmt.Printf("Error setting night light: %v\n", err)
 			os.Exit(1)
 		}
@@ -116,7 +116,7 @@ func handleGamma(percentage int) error {
 	return nil
 }
 
-func handleLumos(state string) error {
+func handleNightLight(state string) error {
 	nl := n.NewLumos()
 
 	switch state {
@@ -124,17 +124,17 @@ func handleLumos(state string) error {
 		if err := nl.Enable(); err != nil {
 			return err
 		}
-		fmt.Println("Lumos enabled")
+		fmt.Println("Night light enabled")
 	case "off":
 		if err := nl.Disable(); err != nil {
 			return err
 		}
-		fmt.Println("Lumos disabled")
+		fmt.Println("Night light disabled")
 	case "toggle":
 		if err := nl.Toggle(); err != nil {
 			return err
 		}
-		fmt.Println("Lumos toggled")
+		fmt.Println("Night light toggled")
 	default:
 		return fmt.Errorf("invalid night light state: %s (must be 'on', 'off', or 'toggle')", state)
 	}
