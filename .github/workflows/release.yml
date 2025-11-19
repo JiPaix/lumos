@@ -1,0 +1,168 @@
+name: Build & Release Windows Executable
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Parse version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION: $VERSION"  # Debug
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Parse semantic version components
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          # Set defaults if parts are missing
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0} 
+          PATCH=${PATCH:-0}
+          BUILD=0  # Always use 0 for builds
+          
+          echo "MAJOR: $MAJOR, MINOR: $MINOR, PATCH: $PATCH"  # Debug
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT  
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+
+      - name: Get build metadata
+        id: metadata
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +'%Y-%m-%d %H:%M:%S')
+          BUILD_YEAR=$(date -u +'%Y')
+          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "date=$BUILD_DATE" >> $GITHUB_OUTPUT
+          echo "year=$BUILD_YEAR" >> $GITHUB_OUTPUT
+
+      - name: Generate Windows manifest
+        run: |
+          cat > lumos.exe.manifest << EOF
+          <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+            <assemblyIdentity
+              version="${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}.${{ steps.version.outputs.patch }}.${{ steps.version.outputs.build }}"
+              processorArchitecture="amd64"
+              name="lumos"
+              type="win32"
+            />
+            <description>Lumos - Night lights, HDR and brightness control</description>
+            <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+              <application>
+                <!-- Windows 10/11 -->
+                <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+              </application>
+            </compatibility>
+          </assembly>
+          EOF
+
+      - name: Install goversioninfo
+        run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+      - name: Create versioninfo.json
+        run: |
+          cat > versioninfo.json << 'EOF'
+          {
+            "FixedFileInfo": {
+              "FileVersion": {
+                "Major": ${{ steps.version.outputs.major }},
+                "Minor": ${{ steps.version.outputs.minor }},
+                "Patch": ${{ steps.version.outputs.patch }},
+                "Build": ${{ steps.version.outputs.build }}
+              },
+              "ProductVersion": {
+                "Major": ${{ steps.version.outputs.major }},
+                "Minor": ${{ steps.version.outputs.minor }},
+                "Patch": ${{ steps.version.outputs.patch }},
+                "Build": ${{ steps.version.outputs.build }}
+              },
+              "FileFlagsMask": "3f",
+              "FileFlags": "00",
+              "FileOS": "040004",
+              "FileType": "01",
+              "FileSubType": "00"
+            },
+            "StringFileInfo": {
+              "Comments": "Control Night lights, HDR, and screen brightness on Windows",
+              "CompanyName": "ALLEGRO Jean-Philippe",
+              "FileDescription": "Lumos - Night lights, HDR and brightness control",
+              "FileVersion": "${{ steps.version.outputs.version }}",
+              "InternalName": "lumos",
+              "LegalCopyright": "Copyright © ${{ steps.metadata.outputs.date }} ALLEGRO Jean-Philippe. MIT License.",
+              "LegalTrademarks": "",
+              "OriginalFilename": "lumos.exe",
+              "PrivateBuild": "",
+              "ProductName": "Lumos",
+              "ProductVersion": "v${{ steps.version.outputs.version }}",
+              "SpecialBuild": ""
+            },
+            "VarFileInfo": {
+              "Translation": {
+                "LangID": "0409",
+                "CharsetID": "04B0"
+              }
+            },
+            "IconPath": "../../icon.ico",
+            "ManifestPath": "../../lumos.exe.manifest"
+          }
+          EOF
+
+      - name: Display generated versioninfo.json
+        run: cat versioninfo.json
+
+      - name: Validate versioninfo.json
+        run: python3 -c "import json; json.load(open('versioninfo.json'))"
+
+      - name: Generate Windows .syso file
+        run: go generate ./cmd/lumos
+
+      - name: Build Windows executable
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+          go build -trimpath \
+          -ldflags="\
+          -s -w \
+          -buildid= \
+          -X 'main.version=v${{ steps.version.outputs.version }}' \
+          -X 'main.commit=${{ steps.metadata.outputs.sha }}' \
+          -X 'main.buildDate=${{ steps.metadata.outputs.date }}' \
+          -extldflags '-static'" \
+          -a \
+          -o lumos.exe.exe ./cmd/lumos
+
+      - name: Verify executable
+        run: file lumos.exe.exe
+          
+      - name: Create checksums
+        run: |
+          sha256sum lumos.exe.exe > lumos.exe.sha256
+          md5sum lumos.exe.exe > lumos.exe.md5
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            lumos.exe.exe
+            lumos.exe.sha256
+            lumos.exe.md5
+          generate_release_notes: true
