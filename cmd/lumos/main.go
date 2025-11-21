@@ -5,6 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"text/tabwriter"
+	"time"
 
 	"github.com/jipaix/lumos/gamma"
 	"github.com/jipaix/lumos/hdr"
@@ -136,18 +139,54 @@ func handleNightLight(state string) error {
 		}
 		fmt.Println("Night light toggled")
 	default:
-		return fmt.Errorf("invalid night light state: %s (must be 'on', 'off', or 'toggle')", state)
+		val, err := strconv.ParseFloat(state, 64)
+		if err != nil {
+			return fmt.Errorf("invalid night light state: %s (must be 'on', 'off', 'toggle', or a percentage like '50')", state)
+		}
+
+		if err := nl.SetStrength(val); err != nil {
+			return err
+		}
+
+		// Check if currently enabled to decide if we need a "hard restart"
+		enabled, err := nl.Enabled()
+		if err != nil {
+			return err
+		}
+
+		// If it's currently on, disable it first to force the refresh
+		if enabled {
+			if err := nl.Disable(); err != nil {
+				return err
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		// Turn it on (or back on)
+		if err := nl.Enable(); err != nil {
+			return err
+		}
+
+		fmt.Printf("Night light strength set to %v%%\n", val)
+		return nil
 	}
 	return nil
 }
 
 func printHelp() {
-	fmt.Println("Usage: lumos [--hdr on|off|toggle] [--gamma <0-100>] [--night on|off|toggle]")
+	fmt.Println("Usage: lumos [--hdr on|off|toggle] [--gamma <0-100>] [--night on|off|toggle|<0-100>]")
 	fmt.Println()
 	fmt.Println("Options:")
-	fmt.Println("  --hdr on|off|toggle  Control HDR")
-	fmt.Println("  --gamma 0-100        Set gamma level")
-	fmt.Println("  --night on|off|toggle Control night light")
-	fmt.Println("  --help               Show help")
-	fmt.Println("  --version            Show version")
+
+	// minwidth=0, tabwidth=0, padding=2, padchar=' ', flags=0
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+
+	// Use \t to separate the flag from the description
+	fmt.Fprintln(w, "  --hdr on|off|toggle\tControl HDR")
+	fmt.Fprintln(w, "  --gamma <0-100>\tSet gamma level")
+	fmt.Fprintln(w, "  --night on|off|toggle|<0-100>\tControl night light")
+	fmt.Fprintln(w, "  --help\tShow help")
+	fmt.Fprintln(w, "  --version\tShow version")
+
+	w.Flush()
 }
