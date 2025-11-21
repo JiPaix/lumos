@@ -1,7 +1,6 @@
 package night
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -245,15 +244,6 @@ func (nl *Lumos) kelvinToPercentage(kelvin float64) float64 {
 func (nl *Lumos) percentageToKelvin(percentage float64) float64 {
 	// Linear mapping from percentage to kelvin
 	return MAX_KELVIN - (percentage/100)*(MAX_KELVIN-MIN_KELVIN)
-}
-
-// Helper functions for hex/byte conversion (not used in main logic but kept for reference)
-func hexToBytes(hexStr string) ([]byte, error) {
-	return hex.DecodeString(hexStr)
-}
-
-func bytesToHex(bytes []byte) string {
-	return hex.EncodeToString(bytes)
 }
 
 // Example usage
