@@ -162,7 +162,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            lumos.exe.exe
+            lumos.exe
             lumos.exe.sha256
             lumos.exe.md5
           generate_release_notes: true
