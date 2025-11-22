@@ -138,7 +138,6 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
           go build -trimpath \
           -ldflags="\
           -s -w \
@@ -149,7 +148,11 @@ jobs:
           -extldflags '-static'" \
           -a \
           -o lumos.exe.exe ./cmd/lumos
-
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+          
       - name: Verify executable
         run: file lumos.exe.exe
           
